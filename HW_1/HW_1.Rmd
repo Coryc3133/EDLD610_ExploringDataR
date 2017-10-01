@@ -36,6 +36,8 @@ library(knitr)
 
 kable(head(math_states))
 ```
+
+
 Next, we'll make a histogram of math scores using the base `hist()` function.
 ```{r histogram of math scores}
 hist(math_states$mean_link_math)
