@@ -4,5 +4,42 @@ author: "Cory Costello"
 date: "October 1, 2017"
 output: pdf_document
 ---
+# List of Steps in HW 1
 
-```{r }
+* Read in dataset
+    + The first chunk of code shows how to read in a .csv file. It uses the seda dataset from Lab 1 for the demonstration, and uses the `read.csv()` function.
+
+* Subset data using select 
+    + The second chunk of code shows how to subset a dataset using `select` from the *dplyr* library. We subset the data such that it contains only math scores and state abbreviation.
+    
+* Making a table using Kable
+    + The third chunk of code shows how to make a table using the `kable()` function from the *knitr* library.
+
+* Getting a Histogram
+    + The fourth chunk of code uses `hist()` from base graphics to produce a histogram of mean math scores.
+
+
+First we need to read in the data. We'll be working with the seda dataset, which is currently in a csv format. The follwing chunk of code uses the the `read.csv()` function to read in the seda dataset. The data is being saved into an object called `seda_data`
+```{r read in dataset}
+seda_data <- read.csv("seda.csv") 
+```
+
+Next, we want to work with only a few columns of that dataset. SO, we can use the `select()` function from *dyplyr* to select the columns we want to work with and save that subsetted dataset into a new column. We will select out the variables corresponding to math scores (means and standard errors) and the state abbreviation. The chunk of code below does this, by first calling the dplyr library, and then using the selct function to select the state abbreviation variable (stateabb) and any variable that contains math in its name. FInally, it shows the first 6 rows of the new subsetted dataset in order to visually inspect that it worked correctly.
+```{r select}
+library(dplyr)
+math_states <- select(seda_data, stateabb, contains("math"))
+head(math_states)
+```
+Next, we may want to put those first six rows into a formatted table. We can do so using the `kable()` function from the knitr library. The chunk of code below does this, by first calling the knitr library, and then using the `head()` function within the `kable()` function to produce a table of the first 6 rows.
+```{r Table of first 6 rows of subsetted data}
+library(knitr)
+
+kable(head(math_states))
+```
+Next, we'll make a histogram of math scores using the base `hist()` function.
+```{r histogram of math scores}
+hist(math_states$mean_link_math)
+```
+
+
+
