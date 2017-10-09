@@ -1,0 +1,34 @@
+---
+title: "HW 2"
+author: "Cory Costello"
+date: "October 9, 2017"
+output: pdf_document
+---
+
+```{r Part 1 Load data}
+library(rio)
+library(tidyverse)
+library(knitr)
+sesame13 <- import("Sesame13.sav")
+sesame13
+
+
+```
+```{r Part 2 Diff bw treatment and control}
+pre_post_difference <- sesame13 %>%
+  select(starts_with("pre"), starts_with("post"), treatmen) %>%
+  mutate(body_diff  = postbody - prebody,
+         let_diff   = postlet - prelet,
+         form_diff  = postform - preform,
+         numb_diff  = postnumb - prenumb,
+         relat_diff = postrel - prerelat,
+         class_diff = postclas - preclass) %>%
+  summarize(m_body_diff  = mean(body_diff, na.rm = TRUE),
+            m_let_diff   = mean(let_diff, na.rm = TRUE),
+            m_form_diff  = mean(form_diff, na.rm = TRUE),
+            m_numb_diff  = mean(numb_diff, na.rm = TRUE),
+            m_relat_diff = mean(relat_diff, na.rm = TRUE),
+            m_class_diff = mean(class_diff, na.rm = TRUE))
+  
+kable(pre_post_difference, digits = 2)
+```
