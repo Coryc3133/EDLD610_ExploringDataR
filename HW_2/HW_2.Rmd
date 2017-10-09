@@ -4,14 +4,19 @@ author: "Cory Costello"
 date: "October 9, 2017"
 output: pdf_document
 ---
-
+# Part 1: Load Data
+In addition to loading the data, I'm going to factorize treatment, setting, and sex to make the output a little prettier later.
 ```{r Part 1 Load data}
 library(rio)
 library(tidyverse)
 library(knitr)
 sesame13 <- import("Sesame13.sav")
+sesame13$treatmen <- factorize(sesame13$treatmen)
+sesame13$setting <- factorize(sesame13$setting)
+sesame13$sex <- factorize (sesame13$sex)
 ```
 
+# Part 2: Difference between treatments at pretest
 ```{r Part 2 Diff bw treatment and control}
 pretest_differences <- sesame13 %>%
   select(starts_with("pre"), treatmen) %>%
@@ -25,12 +30,111 @@ pretest_differences <- sesame13 %>%
   
 kable(pretest_differences, digits = 2)
 ```
-```{r Part 3}
-pre_post_difference <- sesame13 %>%
-  select(starts_with("pre"), starts_with("post"), treatmen) %>%
-  mutate(body_diff  = postbody - prebody,
-         let_diff   = postlet - prelet,
-         form_diff  = postform - preform,
-         numb_diff  = postnumb - prenumb,
-         relat_diff = postrel - prerelat,
-         class_diff = postclas - preclass)
+
+# Part 3
+## Part 3a: Average number gain
+```{r Part 3a}
+number_gain <- sesame13 %>%
+  select(postnumb, prenumb) %>%
+  mutate(numb_gain  = postnumb - prenumb) %>%
+  summarize(M_numb_gain = mean(numb_gain, na.rm = TRUE))
+
+kable(number_gain, digits = 2)
+```
+
+Looks like the average gain in the numbers outcome was `r round(number_gain$M_numb_gain[1], 2)`. 
+
+## Part 3b: Average number gain by treatment
+```{r part 3b}
+number_gain_by_treat <- sesame13 %>%
+  select(treatmen, postnumb, prenumb) %>%
+  mutate(numb_gain  = postnumb - prenumb) %>%
+  group_by(treatmen) %>%
+  summarize(m_numb_gain = mean(numb_gain, na.rm = TRUE))
+
+kable(number_gain_by_treat, digits = 2)
+```
+
+Looks like those people who received the Encouraged Viewing treatment had a higher gain in number ability (*Mean number gain* = `r round(number_gain_by_treat$m_numb_gain[2], 2)`) than those who received no encouragment(*Mean number gain* = `r round(number_gain_by_treat$m_numb_gain[1], 2)`).
+
+## Part 3c: Average number gain by setting
+```{r Part 3c}
+number_gain_by_setting <- sesame13 %>%
+  select(setting, postnumb, prenumb) %>%
+  mutate(numb_gain  = postnumb - prenumb) %>%
+  group_by(setting) %>%
+  summarize(m_numb_gain = mean(numb_gain, na.rm = TRUE))
+
+kable(number_gain_by_setting, digits = 2)
+```
+
+Looks like people in different settings had similar gains in number ability. People in the home setting had an average gain of `r round(number_gain_by_setting$m_numb_gain[1], 2)` and people in the school setting had an average gain of `r round(number_gain_by_setting$m_numb_gain[2], 2)`.
+
+## Part 3d: Average number gain by setting and treatment
+I'm going to try to get this by just using both setting and treatment in the group by function.
+```{r Part 3d}
+number_gain_by_treatxsetting <- sesame13 %>%
+  select(treatmen, setting, postnumb, prenumb) %>%
+  mutate(numb_gain  = postnumb - prenumb) %>%
+  group_by(setting, treatmen) %>%
+  summarize(m_numb_gain = mean(numb_gain, na.rm = TRUE))
+
+kable(number_gain_by_treatxsetting, digits = 2)
+```
+
+Huh, looks like that worked. I'm always amazed at how much sense functions fromt the tidyverse make.
+
+# Part 4
+
+## Part 4a: Gain in letter outcome by sex
+```{r part 4a: Gain in letter outcome by sex}
+letter_gain_by_sex <- sesame13 %>%
+  select(sex, prelet, postlet) %>%
+  mutate(letter_gain = postlet - prelet) %>%
+  group_by(sex) %>%
+  summarize (m_letter_gain = mean(letter_gain, na.rm = TRUE))
+
+kable(letter_gain_by_sex, digits = 2)
+
+```
+
+It appears that average letter gain was lower for men (*mean letter gain* = `r round(letter_gain_by_sex$m_letter_gain[1], 2)`) than it was for women (*mean letter gain* = `r round(letter_gain_by_sex$m_letter_gain[2], 2)`).
+
+## Part 4b: Most variable gain score
+
+```{r Part 4b: Most variable gain score}
+most_variable_gain_score <- sesame13 %>%
+  select(setting, starts_with("pre"), starts_with("post")) %>%
+  mutate(body_gain  = postbody - prebody, 
+         let_gain   = postlet - prelet,
+         form_gain  = postform - preform,
+         numb_gain  = postnumb - prenumb,
+         relat_gain = postrel - prerelat,
+         class_gain = postclas - preclass) %>%
+  group_by(setting) %>%
+  summarize(sd_body_gain  = sd(body_gain, na.rm = TRUE),
+            sd_let_gain   = sd(let_gain, na.rm = TRUE), 
+            sd_form_gain  = sd(form_gain, na.rm = TRUE), 
+            sd_numb_gain  = sd(numb_gain, na.rm = TRUE), 
+            sd_relat_gain = sd(relat_gain, na.rm = TRUE), 
+            sd_class_gain = sd(class_gain, na.rm = TRUE)) %>%
+  gather(key = "gain_score", value = "sd", -setting) %>%
+  arrange(desc(sd))
+
+kable(most_variable_gain_score, digits =2)
+```
+
+As you can see, it looks like letter gain is the most variable in the School setting (*SD* = `r round(most_variable_gain_score$sd[1], 2)`) and the Home setting (*SD* = `r round(most_variable_gain_score$sd[2], 2)`).
+
+## Part 4c: Average ppvt by treatment within site
+
+```{r Average ppvt by treatment within site}
+ppvt_by_treatment_wi_site <- sesame13 %>%
+  select(treatmen, site, ppvt) %>%
+  group_by (site, treatmen) %>%
+  summarize (m_ppvt_score = mean(ppvt, na.rm = TRUE))
+
+kable(ppvt_by_treatment_wi_site, digits = 2)
+```
+
+It looks like there ppvt (Peabody Picture-Vocabulary Test) scores were pretty similar within site across treatment conditions. Although I did not formally test this, it suggests that a decent amount of the variability in ppvt scores is due to site rather than treatment. It further suggests that one should use a modeling approach that accounts for the Site (probably an MLM, with students nested in site).
