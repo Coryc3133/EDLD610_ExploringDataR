@@ -4,4 +4,80 @@ author: "Cory Costello"
 date: "October 24, 2017"
 output: pdf_document
 ---
+1. Tidy the data
+```{r part_1_tidy_data}
+library(rio)
+library(janitor)
+library(tidyverse)
+library(stringr)
+library(knitr)
+project_reads <- import("Project_Reads_Scores.csv") %>%
+  # clean names because some of these variable names are not ideal
+  clean_names()%>%
+  # remove columns 5 to 9
+  select(-(5:9)) 
 
+# Going to rename the unit_5_6 because that will cause some problems later on
+colnames(project_reads)[13:14] <- c("unit_56_score", "unit_56_percent")
+# going to do the same thing for the total ones, since they also follow a different 
+# naming pattern
+colnames(project_reads)[19:20] <- c("unit_total_score", "unit_total_percent")
+
+project_reads_tidy <- project_reads %>%
+  # tidy data such that each row is a score & percentage on a unit
+  # use gather, call the new columns variable and score, and make sure 
+  #to tell gather not to gather the first 4 columns
+  gather(variable, score, -(1:4)) %>%
+  separate(variable, c("elim", "unit_num", "scale")) %>%
+  select(-elim) %>%
+  # changing unit 56 back to 5/6
+  # Note sure that's ideal, because if you wanted to spread later, it'd be a a problem
+  # But I can't think of a better name
+  mutate(unit_num = recode(unit_num, "56" = "5/6")) %>%
+  # Okay, so there are some rows that correspond to all 
+  # students at a site. Going to remove that in a potentially jenky way
+  # separate student_id into two variables: site and id_num, 
+  # since student_id's are in the format "site #", except the all students
+  # one that says "All_students"
+  separate(student_id, c("site", "id_num")) %>%
+  # Now remove the rows corresponding to all students, 
+  # by removing the rows where site contains all (which is the first part of the
+  # student_id string for those total rows)
+  filter(site !="All") %>%
+  # Now re-unite the two parts of student id
+  # this will put a '_' in between the parts, where it used to be a space
+  # I actually like this better, so I'm going to leave it
+  unite(student_id, c("site", "id_num"))
+
+project_reads_tidy$score <- as.numeric(parse_number(project_reads_tidy$score))
+```
+2. Summary Table
+```{r part_2_summary_table}
+project_reads_summary<-project_reads_tidy %>%
+  group_by(test_site, unit_num) %>%
+  filter(scale == "percent") %>%
+  summarize (m_pct_correct = mean(score, na.rm = TRUE))
+
+kable(project_reads_summary, digits = 2)
+```
+
+3. Plot of summary table
+```{r part_3_plot_summary_data}
+ggplot(project_reads_summary, aes(x = test_site, y = m_pct_correct, fill = unit_num)) + 
+  geom_bar(stat = "identity", position = "dodge")
+```
+Looks like each unit is better than the last (but the total is obviously not as high as the last unit, since it's being dragged down by the earlier ones).
+
+4. Extra plot: score across units by student and site
+```{r part_4_plot_from_tidy}
+project_reads_tidy %>%
+  # filter for just the percent variable; also going to remove total 
+  # from this one, since I'm looking at trend across units
+  filter(scale == "percent" & unit_num != "total") %>%
+ggplot(aes(x = unit_num, y = score))+
+  geom_line(aes(group = student_id, color = test_site))
+```
+
+This graph shows each student's progress across units, colored by school. I would have added a regression line too, with geom_smooth, but the unit 5/6 screws that up, and I'm not sure what the best solution is (could recode all of the factors maybe so that it's unit 0-7, could code 5/6 as 5.5 and leave the rest the same; the best solution would depend on what this 5/6 unit is, which I don't currently know).
+
+BTW, looks like something isn't going so hot at Jones; they start off low, looks like a couple students don't improve much, and one student is getting worse.
