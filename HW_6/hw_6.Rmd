@@ -93,7 +93,22 @@ ggplot(full_data, aes(x = year, y = pct_endorsement, color = labor_force_status)
   geom_line()+
   geom_smooth(se= FALSE)+
   facet_wrap(~happiness, nrow = 1)
-
-
 ```
 
+```{r }
+full_data %>%
+  group_by (labor_force_status, happiness) %>%
+  mutate(m_pct_endorsement = (mean(pct_endorsement))/100,
+         pct_endorsement = pct_endorsement/100) %>%
+  ggplot(aes(x = happiness, y = pct_endorsement))+
+  geom_bar(aes(y = m_pct_endorsement, fill = labor_force_status), 
+           stat = "identity", position = "dodge", alpha = .25)+
+  geom_point(aes(y = pct_endorsement, color = labor_force_status), 
+             position =  position_jitterdodge(jitter.width = .2))+
+  scale_fill_brewer(palette = "Set1")+
+  scale_colour_brewer(palette = "Dark2")+
+  scale_y_continuous(name="Fluorescent intensity/arbitrary units", labels = scales::percent) + 
+  ggtitle("Happiness by Labor Status", subtitle = "Data from 1972 to 2016 (bars represent means)")
+```
+
+I just wanted to say somewhere (so I'm putting it here) that getting the percentage sign on the y-axis was pretty tough. I ended up transforming the variables to proportions (.xx) from percentage (xx.xx) and then using the `scales::percent()` function within the `scale_y_continuous()` function. I'm curious if there is an easier way (which I guess you'll probably cover tomorrow).
