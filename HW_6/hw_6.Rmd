@@ -1,0 +1,99 @@
+---
+title: "hw6"
+author: "Cory Costello"
+date: "November 7, 2017"
+output: pdf_document
+---
+#1 Read and Tidy Data
+
+This was a little tricky, since the spreadsheet had 7 lines at the beginning that needed to be skipped and a line at the end also need to be skipped. 
+
+I got through this by using the `skip = 7` argument to skip the first 7 lines, then you had to set `header = TRUE` to get the header in correctly (which started on line 8), then I passed that file to `slice()` to save just the first three rows (eliminating the 3 empty rows, and the final row of notes about the data).
+
+Finally, I gathered the data (excluding the labor status variable), so that year was represented row-wise. Then, I had to use a combination of separates and unites to get percentage and se variables together, and ended by mutating to turn the percentage, se, and year into numeric variables (year required `parse_number()`, since each had an x in front of the year, as it was imported as column names).
+
+Finally, I used bind_rows to combine the data, used `.id = TRUE` to maintain a record of the source dataset, and then changed those id's (1, 2, 3) to substantive labels (not_happy, pretty_happy, very_happy)
+```{r read_in_and_tidy_data}
+library(tidyverse)
+library(rio)
+
+not_happy <- import("not_happy.csv", skip = 7, header = TRUE) %>%
+  janitor::clean_names() %>%
+  slice(1:3) %>%
+  gather(year, pct_endorsement, -labor_force_status) %>%
+  separate(pct_endorsement, c("pct_endorsement", "pct_dec",
+                              "se_endorsement", "se_dec")) %>%
+  unite(pct_endorsement, pct_endorsement:pct_dec, sep = ".") %>%
+  unite(se_endorsement, se_endorsement:se_dec, sep = ".") %>%
+  mutate(pct_endorsement = as.numeric(pct_endorsement),
+         se_endorsement = as.numeric(se_endorsement),
+         year = parse_number(year))
+  
+
+pretty_happy <- import("pretty_happy.csv", skip = 7, header = TRUE) %>%
+  janitor::clean_names()%>%
+  slice(1:3) %>%
+  gather(year, pct_endorsement, -labor_force_status) %>%
+  separate(pct_endorsement, c("pct_endorsement", "pct_dec",
+                              "se_endorsement", "se_dec")) %>%
+  unite(pct_endorsement, pct_endorsement:pct_dec, sep = ".") %>%
+  unite(se_endorsement, se_endorsement:se_dec, sep = ".") %>%
+  mutate(pct_endorsement = as.numeric(pct_endorsement),
+         se_endorsement = as.numeric(se_endorsement),
+         year = parse_number(year))
+    
+
+very_happy <- import("very_happy.csv", skip = 7, header = TRUE) %>%
+  janitor::clean_names()%>%
+  slice(1:3) %>%
+  gather(year, pct_endorsement, -labor_force_status) %>%
+  separate(pct_endorsement, c("pct_endorsement", "pct_dec",
+                              "se_endorsement", "se_dec")) %>%
+  unite(pct_endorsement, pct_endorsement:pct_dec, sep = ".") %>%
+  unite(se_endorsement, se_endorsement:se_dec, sep = ".") %>%
+  mutate(pct_endorsement = as.numeric(pct_endorsement),
+         se_endorsement = as.numeric(se_endorsement),
+         year = parse_number(year))
+
+full_data <- bind_rows(not_happy, pretty_happy, very_happy, .id = "happiness") %>%
+  mutate(happiness = ifelse(happiness == 1, "not_happy", 
+                            ifelse(happiness == 2, "pretty_happy", "very_happy")))
+```
+
+# 2 Answering some questions
+
+```{r 2a_pct_very_happy}
+highest_pct_vhappy<- full_data %>%
+  filter(happiness == "very_happy") %>%
+  arrange(desc(pct_endorsement)) %>%
+  slice(1)
+
+highest_pct_vhappy
+```
+It looks like the highest percentage of folks that endorsed being very happy were `r highest_pct_vhappy$labor_force_status` in the year `r highest_pct_vhappy$year`; `r highest_pct_vhappy$pct_endorsement`% of them endorsed being very happy.
+
+```{r 2b_avg_pct_happiness_employed}
+pct_happiness_employed<- full_data %>%
+  filter(labor_force_status == "Employed") %>%
+  group_by(happiness) %>%
+  summarize(m_pct_endorsement = mean(pct_endorsement, na.rm = TRUE),
+            m_se_endorsement  = mean(se_endorsement, na.rm = TRUE))
+
+pct_happiness_employed
+```
+
+It looks like, within respondents whose labor force satus was reported as Employed, `r round(pct_happiness_employed$m_pct_endorsement[1], 2)`% indicated that they were "not happy", `r round(pct_happiness_employed$m_pct_endorsement[2], 2)`% indicated that they were "pretty happy", and `r round(pct_happiness_employed$m_pct_endorsement[3], 2)`% indicated that they were "very happy", averaged across available years.
+
+# 3 Plots!!
+```{r}
+library(ggthemes)
+theme_set(theme_minimal())
+
+ggplot(full_data, aes(x = year, y = pct_endorsement, color = labor_force_status)) +
+  geom_line()+
+  geom_smooth(se= FALSE)+
+  facet_wrap(~happiness, nrow = 1)
+
+
+```
+
