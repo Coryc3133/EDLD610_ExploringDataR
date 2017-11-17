@@ -5,11 +5,11 @@ date: ""
 output: pdf_document
 ---
 
-I'm interested in one particular question in the competition, which is how grades have changed (or stayed the same) across the state. In particular, I'm interested in looking at the extent to which there is rank-order stability and mean-level change in both achievement and growth grades in each subject. I'll look at rank-order stability by conducting correlations of grades within each subject across years, which will yield two estimates of 1-year-stability (2010 to 2011; 2011 to 2012) and one estimate of 2-year-stability (2010 to 2012). For mean-level change, I'll just look at the extent to which change occured acros the three measurement occassions.
+I'm interested in  how grades have changed (or stayed the same) across the state. I'm also interested in looking at this for different sections (or subjects; math, writing, etc.) and different measurements (i.e., growth vs. achievement)
 
 Additionally, I'm going to work at the district-level. The main reason I'm doing this is because it seems like one of the highest levels to work with (as opposed to schools), and I don't want to deal with the dependencies at lower levels (e.g., dependencies between schools in a district). I imagine that even districts have dependendencies that someone more well-versed in education work would model (e.g., adjacency? or county?), but it seems more reasonable to treat districts as independent. 
 
-Moreover, I want to see if stability and change in grades are the same in districts with more or less people on free and reduced lunch. 
+Moreover, I want to see if average grades and change in grades are the same in districts with more or less people on free and reduced lunch. 
 
 Finally, I'm going to limit my analyses to traditional public schools, and will eliminate charter and online schools before I aggregate to district-level data.
 
@@ -19,6 +19,7 @@ First, I'll load the data. I'm going to load the final grades data from each yea
 ```{r load_data}
 library(tidyverse)
 library(rio)
+library(ggthemes)
 
 final_grades_2010 <- import("../../../Data/CO_data/2010_final_grade.csv", 
                             setclass = "tbl_df") %>%
@@ -126,11 +127,10 @@ district_lvl_finalgrades2012 <- final_grades_2012 %>%
   mutate(year = 2012)
 ```
 
-Next, I'm going to join the three tidy district-level final grades data.
+Next, I'm going to use rbind to combine the three tidy district-level final grades data.
 ```{r}
-district_lvl_finalgrades_allyears <- district_lvl_finalgrades2010 %>%
-  left_join(district_lvl_finalgrades2011) %>%
-  left_join(district_lvl_finalgrades2012)
+district_lvl_finalgrades_allyears <- rbind(district_lvl_finalgrades2010, district_lvl_finalgrades2011) %>%
+  rbind(district_lvl_finalgrades2012)
 ```
 
 Now I'll tidy and aggregate (to district level) the percentage of students that receive free and reduced lunch.
@@ -142,41 +142,147 @@ This boils down to:
 * filter out charter and online schools with anti_join
 * group by district name
 * aggreate to district level data with summarize, taking the average percentage of students on free and reduced lunch per district.
+* Mutate to add year
+    * Also going to mutate to bin free and reduced lunch into the following categories:
+        * grand mean
+        * + 1 SD
+        * - 1 SD
 ```{r}
 district_lvl_frl_2010 <- frl_2010 %>%
   mutate(percent_free_and_reduced = parse_number(percent_free_and_reduced)) %>%
   rename(schoolname = school_name) %>%
   anti_join(charter_and_online_schools_2010) %>%
   group_by(district_name) %>%
-  summarize(m_pct_frl = mean(percent_free_and_reduced, na.rm = TRUE))
+  summarize(m_pct_frl = mean(percent_free_and_reduced, na.rm = TRUE)) %>%
+  mutate(year = 2010,
+         frl_bin = ifelse(m_pct_frl > (mean(m_pct_frl, na.rm = TRUE) 
+                                       + sd(m_pct_frl, na.rm = TRUE)), "high",
+                          ifelse(m_pct_frl < (mean(m_pct_frl, na.rm = TRUE) 
+                                       - sd(m_pct_frl, na.rm = TRUE)), "low",
+                          "medium")))
+
 
 district_lvl_frl_2011 <- frl_2011 %>%
   mutate(percent_free_and_reduced = parse_number(percent_free_and_reduced)) %>%
   rename(schoolname = school_name) %>%
   anti_join(charter_and_online_schools_2010) %>%
   group_by(district_name) %>%
-  summarize(m_pct_frl = mean(percent_free_and_reduced, na.rm = TRUE))
+  summarize(m_pct_frl = mean(percent_free_and_reduced, na.rm = TRUE)) %>%
+  mutate(year = 2011,
+         frl_bin = ifelse(m_pct_frl > (mean(m_pct_frl, na.rm = TRUE) 
+                                       + sd(m_pct_frl, na.rm = TRUE)), "high",
+                          ifelse(m_pct_frl < (mean(m_pct_frl, na.rm = TRUE) 
+                                       - sd(m_pct_frl, na.rm = TRUE)), "low",
+                          "medium")))
+
 
 district_lvl_frl_2012 <- frl_2012 %>%
   mutate(percent_free_and_reduced = parse_number(percent_free_and_reduced)) %>%
   rename(schoolname = school_name) %>%
   anti_join(charter_and_online_schools_2010) %>%
   group_by(district_name) %>%
-  summarize(m_pct_frl = mean(percent_free_and_reduced, na.rm = TRUE))
+  summarize(m_pct_frl = mean(percent_free_and_reduced, na.rm = TRUE)) %>%
+  mutate(year = 2012,
+         frl_bin = ifelse(m_pct_frl > (mean(m_pct_frl, na.rm = TRUE) 
+                                       + sd(m_pct_frl, na.rm = TRUE)), "high",
+                          ifelse(m_pct_frl < (mean(m_pct_frl, na.rm = TRUE) 
+                                       - sd(m_pct_frl, na.rm = TRUE)), "low",
+                          "medium")))
+
 ```
 
-Now I'll join these free and reduced lunch data to each other
+Now I'll join these free and reduced lunch data to each other. I'm also going to relevel the percent free lunch bins to make sure they're low = 1, medium = 2, and high = 3
 
 ```{r}
-district_lvl_frl_allyears <- district_lvl_frl_2010 %>%
-  left_join(district_lvl_frl_2011) %>%
-  left_join(district_lvl_frl_2012)
+
+district_lvl_frl_allyears <- rbind(district_lvl_frl_2010, 
+                                   district_lvl_frl_2011) %>%
+  rbind(district_lvl_frl_2012) %>%
+  mutate(frl_bin = factor(frl_bin, levels = c("low", "medium", "high")))
 ```
 
 And finally, join the district level grades data and free and reduced lunch data.
 
 ```{r}
 district_lvl_grades_frl_allyears <- district_lvl_finalgrades_allyears %>%
-  left_join(district_lvl_frl_allyears)
+  left_join(district_lvl_frl_allyears) %>%
+  ungroup()
 ```
 
+# Plot 1: Changes in Grades across time by subject, measurement type, and percentage of students that receive free and reduced lunch
+```{r, message=FALSE, warning=FALSE}
+district_lvl_grades_frl_allyears %>%
+  filter(!is.na(frl_bin) &
+           section != "ell") %>%
+ggplot(aes(x = year, y = mean_grade, color = frl_bin)) +
+  #geom_point() +
+  geom_line(aes(group = district_name), alpha = .25) +
+  geom_smooth( size = 1) + 
+  facet_grid(type ~ section)
+```
+
+# Plot 2: Average grade by year, subject, and measurement type
+```{r, message=FALSE, warning=FALSE}
+district_lvl_grades_frl_allyears %>%
+  filter(!is.na(frl_bin) &
+           section != "ell") %>%
+  group_by(frl_bin, section, type, year) %>%
+  mutate(frlbin_mean_grade = mean(mean_grade, na.rm = TRUE)) %>%
+  
+  ggplot(aes(x = year, y = mean_grade, color = frl_bin)) +
+  geom_bar(aes(y = frlbin_mean_grade, fill = frl_bin), 
+           stat = "identity", position = "dodge")+
+  geom_point(position = position_jitterdodge(), alpha = .1) +
+  facet_grid(type ~ section) +
+  scale_fill_brewer(palette = "Set1") + 
+  scale_color_brewer(palette = "Set2")
+
+```
+
+It looks like differences in grade by percentage of students in free and reduced lunch are less strong with the growth factor than the achievement factor. I'm going to attempt to see that a little clearer in the following plot.
+
+Sicne I'll be collapsing across section/subject, I'll remove the overall scores (don't want those to go into the mean across sections).
+
+# Plot 3: Average grade by percentage of students on free and reduced lunch (high, medium, low) for achievement and growth
+
+```{r}
+district_lvl_grades_frl_allyears %>%
+  filter(!is.na(frl_bin) &
+           section != "ell" &
+           section != "overall") %>%
+  ungroup() %>%
+  ggplot(aes(x = type, y = mean_grade, fill = frl_bin)) +
+  geom_bar(stat = "identity", position = "dodge")
+```
+
+Interesting, it looks like there basically now differences in growth based on percentage of students in free and reduced lunch, and it looks like achievement is only worse for districts with a high percentage of students on free and reduced lunch (low and medium look the same)
+
+Next, let's see this by subject
+
+# Plot 4: Average Grade by Measurement Type and Percentage of Students on Free and Reduced Lunch in District
+
+```{r}
+district_lvl_grades_frl_allyears %>%
+  filter(!is.na(frl_bin) &
+           section != "ell" &
+           section != "overall") %>%
+  ungroup() %>%
+  ggplot(aes(x = type, y = mean_grade, fill = frl_bin)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  facet_wrap(~section)
+```
+ Hmm, looks like districts with a high percentage of students on free and reduced lunch perform consistently worse when assessed by achievement. When assessed by growth, they perform similarly on math, a little lower on reading, and a little better on writing. Now let's see if this is similar in different years.
+
+# Plot 5: Average Grade by Measurement Type and Percentage of Students on Free and Reduced Lunch in District by Year
+```{r}
+district_lvl_grades_frl_allyears %>%
+  filter(!is.na(frl_bin) &
+           section != "ell" &
+           section != "overall") %>%
+  ungroup() %>%
+  ggplot(aes(x = type, y = mean_grade, fill = frl_bin)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  facet_grid(year~section)
+```
+
+Looks like the pattern is consistent across years for achievement (where grades in districts with a high percentage of students on free and reduced lunch perform worse), but is much less consistent across years for growth. 
