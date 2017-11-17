@@ -1,0 +1,182 @@
+---
+title: "hw 7"
+author: "Cory Costello"
+date: ""
+output: pdf_document
+---
+
+I'm interested in one particular question in the competition, which is how grades have changed (or stayed the same) across the state. In particular, I'm interested in looking at the extent to which there is rank-order stability and mean-level change in both achievement and growth grades in each subject. I'll look at rank-order stability by conducting correlations of grades within each subject across years, which will yield two estimates of 1-year-stability (2010 to 2011; 2011 to 2012) and one estimate of 2-year-stability (2010 to 2012). For mean-level change, I'll just look at the extent to which change occured acros the three measurement occassions.
+
+Additionally, I'm going to work at the district-level. The main reason I'm doing this is because it seems like one of the highest levels to work with (as opposed to schools), and I don't want to deal with the dependencies at lower levels (e.g., dependencies between schools in a district). I imagine that even districts have dependendencies that someone more well-versed in education work would model (e.g., adjacency? or county?), but it seems more reasonable to treat districts as independent. 
+
+Moreover, I want to see if stability and change in grades are the same in districts with more or less people on free and reduced lunch. 
+
+Finally, I'm going to limit my analyses to traditional public schools, and will eliminate charter and online schools before I aggregate to district-level data.
+
+# Load Data
+
+First, I'll load the data. I'm going to load the final grades data from each year (2010, 2011, 2012) and the free and reduced lunch data from each year (2010, 2011, 2012).
+```{r load_data}
+library(tidyverse)
+library(rio)
+
+final_grades_2010 <- import("../../../Data/CO_data/2010_final_grade.csv", 
+                            setclass = "tbl_df") %>%
+  janitor::clean_names()
+
+final_grades_2011 <- import("../../../Data/CO_data/2011_final_grade.csv", 
+                            setclass = "tbl_df") %>%
+  janitor::clean_names()
+
+final_grades_2012 <- import("../../../Data/CO_data/2012_final_grade.csv", 
+                            setclass = "tbl_df") %>%
+  janitor::clean_names()
+
+# Free and reduced lunch data 
+frl_2010 <- import("../../../Data/CO_data/2010_k_12_FRL.csv", 
+                            setclass = "tbl_df") %>%
+  janitor::clean_names()
+
+frl_2011 <- import("../../../Data/CO_data/2011_k_12_FRL.csv", 
+                            setclass = "tbl_df") %>%
+  janitor::clean_names()
+
+frl_2012 <- import("../../../Data/CO_data/2012_k_12_FRL.csv", 
+                            setclass = "tbl_df") %>%
+  janitor::clean_names()
+```
+
+# Prepare to filter out charter and online schools
+
+As stated above, I'm going to limit my analyses to traditional public schools, so I'll eliminate charter and online schools. To do so, I'm going to use `anti_join()` to do a *filter join*.
+
+To prepare for this, I'm going to set up a dataframe of just the charter and online schools from 2010 (the only year in which that data appears to be available). My assumption is that charter/online status is invariant across this period, though admittedly its possible that this will exclude some schools that shouldn't be excluded (if they were an online school / had an online program that went away in 2011)
+
+```{r}
+charter_and_online_schools_2010 <- final_grades_2010 %>%
+  select(schoolname, schoolnumber, charteroronline) %>%
+  filter(charteroronline == "Charter" |
+           charteroronline == "Charter & Online" |
+           charteroronline == "Online")
+```
+
+
+# Tidy, Aggregate, and join Data
+I'm going to tidy and aggregate the final grades datasets from each year in the same pipeline. This will essentially boil down to:
+
+* filter join using `anti_join()` to remove charter and online schools
+* Selecting just the following columns:
+    * districtname - name of the school district
+    * anything that contains growth - this will select all of the growth grade columns
+    * anything that contains "ach" - this will select all of the achievement grade columns
+* Renaming two columns:
+    * `overall_weighted_growth_grade` will be renamed `overall_growth_grade` to match the other variables' patterns (for gathering)
+    * `districtname` will be renamed `district_name`
+        * This is already the name of that variable in `final_grades_2012`, so I'm changing the 2010 and 2011 datasets to match the 2012 one.
+* gather the growth and achievement grades
+    * I'm doing this by gathering everything except district_name (leaving only the growth and achievement grades).
+* separate the newly gathered `variable` column into its three parts, which are:
+    * `section` - this is the subject area of the grade (math, writing, science, etc.)
+    * `type` - this is growth or achievement
+    * `elim` - this repeats grade at each row; it will be removed
+* selecting out the `elim` column
+* grouping by district name, section (or subject), and type (achievement vs. growth)
+* summarizing to get the mean (across schools within each district) grade for each section and measurement type (achievement vs. growth).
+* mutate to add the year for the dataset (which will be helful once the three are joined)
+
+```{r }
+
+district_lvl_finalgrades2010 <- final_grades_2010 %>%
+  anti_join(charter_and_online_schools_2010) %>%
+  select(districtname, contains("growth"), contains("ach")) %>%
+  rename(overall_growth_grade = overall_weighted_growth_grade,
+         district_name = districtname) %>%
+  gather(variable, grade, -district_name) %>%
+  separate(variable, c("section", "type", "elim")) %>%
+  select(-elim) %>%
+  group_by(district_name, section, type) %>%
+  summarize(mean_grade = mean(grade, na.rm = TRUE)) %>%
+  mutate(year = 2010)
+
+district_lvl_finalgrades2011 <- final_grades_2011 %>%
+  anti_join(charter_and_online_schools_2010) %>%
+  select(districtname, contains("growth"), contains("ach")) %>%
+  rename(overall_growth_grade = overall_weighted_growth_grade,
+         district_name = districtname) %>%
+  gather(variable, grade, -district_name) %>%
+  separate(variable, c("section", "type", "elim")) %>%
+  select(-elim) %>%
+  group_by(district_name, section, type) %>%
+  summarize(mean_grade = mean(grade, na.rm = TRUE)) %>%
+  mutate(year = 2011)
+
+district_lvl_finalgrades2012 <- final_grades_2012 %>%
+  # school name appears as school_name here, and schoolname elsewhere 
+  # (including the charteronline data used in anti_join)
+  # going to rename it in this one, since its being thrown out anyway
+  rename(schoolname = school_name) %>%
+  anti_join(charter_and_online_schools_2010) %>%
+  select(district_name, contains("growth"), contains("ach")) %>%
+  rename(overall_growth_grade = overall_weighted_growth_grade) %>%
+  gather(variable, grade, -district_name) %>%
+  separate(variable, c("section", "type", "elim")) %>%
+  select(-elim) %>%
+  group_by(district_name, section, type) %>%
+  summarize(mean_grade = mean(grade, na.rm = TRUE)) %>%
+  mutate(year = 2012)
+```
+
+Next, I'm going to join the three tidy district-level final grades data.
+```{r}
+district_lvl_finalgrades_allyears <- district_lvl_finalgrades2010 %>%
+  left_join(district_lvl_finalgrades2011) %>%
+  left_join(district_lvl_finalgrades2012)
+```
+
+Now I'll tidy and aggregate (to district level) the percentage of students that receive free and reduced lunch.
+
+This boils down to:
+
+* changing `percent_free_reduced` variable from character to double (with `parse_number()` and `mutate()`).
+* rename schoolname to school_name
+* filter out charter and online schools with anti_join
+* group by district name
+* aggreate to district level data with summarize, taking the average percentage of students on free and reduced lunch per district.
+```{r}
+district_lvl_frl_2010 <- frl_2010 %>%
+  mutate(percent_free_and_reduced = parse_number(percent_free_and_reduced)) %>%
+  rename(schoolname = school_name) %>%
+  anti_join(charter_and_online_schools_2010) %>%
+  group_by(district_name) %>%
+  summarize(m_pct_frl = mean(percent_free_and_reduced, na.rm = TRUE))
+
+district_lvl_frl_2011 <- frl_2011 %>%
+  mutate(percent_free_and_reduced = parse_number(percent_free_and_reduced)) %>%
+  rename(schoolname = school_name) %>%
+  anti_join(charter_and_online_schools_2010) %>%
+  group_by(district_name) %>%
+  summarize(m_pct_frl = mean(percent_free_and_reduced, na.rm = TRUE))
+
+district_lvl_frl_2012 <- frl_2012 %>%
+  mutate(percent_free_and_reduced = parse_number(percent_free_and_reduced)) %>%
+  rename(schoolname = school_name) %>%
+  anti_join(charter_and_online_schools_2010) %>%
+  group_by(district_name) %>%
+  summarize(m_pct_frl = mean(percent_free_and_reduced, na.rm = TRUE))
+```
+
+Now I'll join these free and reduced lunch data to each other
+
+```{r}
+district_lvl_frl_allyears <- district_lvl_frl_2010 %>%
+  left_join(district_lvl_frl_2011) %>%
+  left_join(district_lvl_frl_2012)
+```
+
+And finally, join the district level grades data and free and reduced lunch data.
+
+```{r}
+district_lvl_grades_frl_allyears <- district_lvl_finalgrades_allyears %>%
+  left_join(district_lvl_frl_allyears)
+```
+
